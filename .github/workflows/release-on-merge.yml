@@ -1,0 +1,112 @@
+name: Auto Release on Merge
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  auto_release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Check if commit is a merge commit and extract PR number
+        id: extract_pr
+        run: |
+          # Count parents to confirm a merge commit
+          parents_count=$(git log -1 --pretty=%P | wc -w)
+          if [ $parents_count -ne 2 ]; then
+            echo "Not a merge commit. Exiting."
+            exit 0
+          fi
+
+          # Extract PR number from the merge commit message.
+          # Merge commit messages typically look like: "Merge pull request #123 from user/branch"
+          PR_NUMBER=$(git log -1 --pretty=%B | grep -oE '#[0-9]+' | head -n1 | tr -d '#')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR number found in commit message. Exiting."
+            exit 0
+          fi
+
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+
+      - name: Retrieve PR labels
+        id: pr_labels
+        run: |
+          # Use the gh CLI to fetch PR details and parse labels
+          OWNER=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f1)
+          REPO=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
+          PR_NUMBER=${PR_NUMBER}
+
+          PR_DATA=$(gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER --jq '.labels[].name' || true)
+          echo "PR_LABELS=$PR_DATA" >> $GITHUB_ENV
+
+      - name: Determine version bump type
+        id: version_bump_type
+        run: |
+          PR_LABELS="${PR_LABELS}"
+          BUMP_TYPE="patch" # default
+          if echo "$PR_LABELS" | grep -iq "major"; then
+            BUMP_TYPE="major"
+          elif echo "$PR_LABELS" | grep -iq "minor"; then
+            BUMP_TYPE="minor"
+          elif echo "$PR_LABELS" | grep -iq "patch"; then
+            BUMP_TYPE="patch"
+          fi
+          echo "BUMP_TYPE=$BUMP_TYPE" >> $GITHUB_ENV
+
+      - name: Get latest tag
+        id: get_latest_tag
+        run: |
+          # Get the latest semver tag
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "latest_tag=$latest_tag" >> $GITHUB_ENV
+
+      - name: Bump version
+        id: bump_version
+        run: |
+          latest="${latest_tag}"
+          version="${latest#v}"
+          IFS='.' read -r major minor patch <<< "$version"
+
+          case "$BUMP_TYPE" in
+            major)
+              major=$((major+1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor+1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch+1))
+              ;;
+          esac
+
+          new_version="v${major}.${minor}.${patch}"
+          echo "new_version=$new_version" >> $GITHUB_ENV
+
+      - name: Create new tag
+        id: create_tag
+        run: |
+          new_version="$new_version"
+          git tag "$new_version"
+          git push origin "$new_version"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ env.new_version }}
+          release_name: ${{ env.new_version }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
