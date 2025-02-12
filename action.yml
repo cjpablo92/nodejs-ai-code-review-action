@@ -1,9 +1,10 @@
-name: nodejs-ai-code-review"
-description: Analyze a Node.js PR diff using OpenAI and provide structured feedback.
-author: cjpablo92
+name: nodejs-ai-code-review
+description: "Analyze a Node.js PR diff using OpenAI and provide structured feedback."
+author: "cjpablo92"
 branding:
-  icon: 'terminal'
-  color: 'white'
+  icon: "terminal"
+  color: "white"
+
 runs:
   using: "composite"
   steps:
