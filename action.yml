@@ -6,7 +6,7 @@ branding:
   color: "white"
 
 runs:
-  using: "composite"
+  using: composite
   steps:
     - name: Install dependencies
       run: |
@@ -15,57 +15,24 @@ runs:
 
     - name: Get diff
       run: |
-        DIFF_OUTPUT=$(git diff ${{ inputs.base_sha }} ${{ inputs.head_sha }} -- '*.js' '*.ts' '*.jsx' '*.tsx' '*.json' '*.yml' '*.yaml' ':!node_modules' ':!dist' ':!package-lock.json')
-        echo "DIFF=$DIFF_OUTPUT" >> $GITHUB_ENV
+        DIFF_OUTPUT=$(git diff "${{ inputs.base_sha }}" "${{ inputs.head_sha }}" -- '*.js' '*.ts' '*.jsx' '*.tsx' '*.json' '*.yml' '*.yaml' ':!node_modules' ':!dist' ':!package-lock.json')
+        echo "DIFF=$DIFF_OUTPUT" >> "$GITHUB_ENV"
 
     - name: Create prompt
       run: |
-        PROMPT="$(cat <<EOF
-You are a super senior tech lead reviewing a pull request for a Node.js project.
-Your job is to:
-1. Identify any bugs or logical issues in the code.
-2. Suggest improvements for best practices in coding style, architecture, and design.
-3. Highlight security vulnerabilities or concerns.
-4. Suggest cleaner code and maintainability improvements.
-
-Format your answer as a structured report with the following sections (use "None observed" if no findings):
-**Bugs or Logical Issues:**
-- ...
-
-**Best Practices (Coding Style, Architecture, Design):**
-- ...
-
-**Security Vulnerabilities or Concerns:**
-- ...
-
-**Cleaner Code & Maintainability Improvements:**
-- ...
-
-Below is the diff of changes made in this pull request:
-
-${DIFF}
-EOF
-)"
-        echo "PROMPT=$PROMPT" >> $GITHUB_ENV
+        PROMPT="You are a super senior tech lead reviewing a pull request for a Node.js project.\nYour job is to:\n1. Identify any bugs or logical issues in the code.\n2. Suggest improvements for best practices in coding style, architecture, and design.\n3. Highlight security vulnerabilities or concerns.\n4. Suggest cleaner code and maintainability improvements.\n\nFormat your answer as a structured report with the following sections (use \"None observed\" if no findings):\n**Bugs or Logical Issues:**\n- ...\n\n**Best Practices (Coding Style, Architecture, Design):**\n- ...\n\n**Security Vulnerabilities or Concerns:**\n- ...\n\n**Cleaner Code & Maintainability Improvements:**\n- ...\n\nBelow is the diff of changes made in this pull request:\n${DIFF}"
+        echo "PROMPT=$PROMPT" >> "$GITHUB_ENV"
 
     - name: Call OpenAI API
       env:
         OPENAI_API_KEY: ${{ inputs.openai_api_key }}
       run: |
-        RESPONSE=$(curl https://api.openai.com/v1/chat/completions \
+        RESPONSE=$(curl "https://api.openai.com/v1/chat/completions" \
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $OPENAI_API_KEY" \
-          -d '{
-            "model": "'${{ inputs.model }}'",
-            "messages": [
-              {"role": "system", "content": "You are a super senior tech lead code reviewer."},
-              {"role": "user", "content": "'"$PROMPT"'"}
-            ],
-            "max_tokens": 1500,
-            "temperature": 0.3
-          }')
+          -d "{\"model\":\"${{ inputs.model }}\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a super senior tech lead code reviewer.\"},{\"role\":\"user\",\"content\":\"$PROMPT\"}],\"max_tokens\":1500,\"temperature\":0.3}")
         REVIEW=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
-        echo "review=$REVIEW" >> $GITHUB_OUTPUT
+        echo "review=$REVIEW" >> "$GITHUB_OUTPUT"
 
 inputs:
   base_sha:
